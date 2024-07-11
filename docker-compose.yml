@@ -1,74 +1,105 @@
+# Specify the Docker Compose file format version
 version: '2'
-services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - 2181:2181
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo stat | nc localhost 2181 "]
-      interval: 10s
-      timeout: 30s
-      retries: 5
-    networks:
-      - kafka-network
 
+# Define all the services involved in the application
+services:
+
+  # Zookeeper service definition
+  zookeeper:
+    # Use the latest Confluent Zookeeper image
+    image: confluentinc/cp-zookeeper:latest
+    # Set environment variables for Zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181  # Port Zookeeper clients will connect to
+      ZOOKEEPER_TICK_TIME: 2000    # The length of a single tick in milliseconds
+    # Map ports from the host to the container
+    ports:
+      - 2181:2181  # Expose port 2181 on the host and bind it to port 2181 in the container
+    # Define health check parameters
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo stat | nc localhost 2181 "]  # Command to check Zookeeper health
+      interval: 10s  # Time between running the check
+      timeout: 30s   # Time allowed for the health check to run
+      retries: 5     # Number of retries to consider the service unhealthy
+    # Specify network connections
+    networks:
+      - kafka-network  # Connect to the kafka-network
+
+  # Kafka service definition
   kafka:
+    # Use the latest Confluent Kafka image
     image: confluentinc/cp-kafka:latest
+    # Define dependencies with condition
     depends_on:
       zookeeper:
-        condition: service_healthy
+        condition: service_healthy  # Depends on the zookeeper service being healthy
+    # Map ports from the host to the container
     ports:
-      - 9092:9092
-      - 29092:29092
+      - 9092:9092   # Default Kafka port for Kafka brokers
+      - 29092:29092 # External access port
+    # Specify network connections
     networks:
-      - kafka-network
+      - kafka-network  # Connect to the kafka-network
+    # Set environment variables for Kafka
     environment:
-      KAFKA_BROKER_ID: 0
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: LISTENER_INTERNAL://kafka:9092,LISTENER_EXTERNAL://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_INTERNAL:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_INTERNAL
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_CREATE_TOPICS: "user-login:1:1,processed-data:1:1"
+      KAFKA_BROKER_ID: 0  # Unique identifier for the Kafka broker
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181  # Connection string for Zookeeper
+      KAFKA_ADVERTISED_LISTENERS: LISTENER_INTERNAL://kafka:9092,LISTENER_EXTERNAL://localhost:29092  # Listeners for internal and external clients
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_INTERNAL:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT  # Protocol map
+      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_INTERNAL  # Default listener for inter-broker communication
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1  # Replication factor for offset topic
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1  # Replication factor for transaction topic
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1  # Minimum in-sync replicas
+      KAFKA_CREATE_TOPICS: "user-login:1:1,processed-data:1:1"  # Automatically create topics on startup
+    # Define health check parameters
     healthcheck:
       test: ["CMD", "bash", "-c", "nc -z localhost 9092"]
       interval: 10s
       timeout: 30s
       retries: 5
 
+  # Python producer service definition
   my-python-producer:
+    # Use a specific image for the producer
     image: mpradeep954/fetch-de-data-gen
+    # Define dependencies with condition
     depends_on:
       kafka:
-        condition: service_healthy
+        condition: service_healthy  # Depends on the Kafka service being healthy
+    # Automatically restart on failure up to 10 times
     restart: on-failure:10
+    # Map ports from the host to the container
     ports:
-      - 9093:9093
+      - 9093:9093  # Expose port 9093 on the host
+    # Set environment variables for the producer
     environment:
-      BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: user-login
+      BOOTSTRAP_SERVERS: kafka:9092  # Kafka cluster address
+      KAFKA_TOPIC: user-login        # Kafka topic to produce to
+    # Specify network connections
     networks:
-      - kafka-network
+      - kafka-network  # Connect to the kafka-network
 
+  # Python consumer service definition
   my-python-consumer:
+    # Build from a Dockerfile located in the ./consumer directory
     build: ./consumer
+    # Define dependencies with condition
     depends_on:
       kafka:
-        condition: service_healthy
+        condition: service_healthy  # Depends on the Kafka service being healthy
+    # Set environment variables for the consumer
     environment:
-      BOOTSTRAP_SERVERS: kafka:9092
-      INPUT_TOPIC: user-login
-      OUTPUT_TOPIC: processed-data
+      BOOTSTRAP_SERVERS: kafka:9092  # Kafka cluster address
+      INPUT_TOPIC: user-login        # Input topic to consume from
+      OUTPUT_TOPIC: processed-data   # Output topic to produce to
+    # Specify network connections
     networks:
-      - kafka-network
+      - kafka-network  # Connect to the kafka-network
+    # Mount volume for persistent data storage
     volumes:
-      - ./insights:/app/insights
+      - ./insights:/app/insights  # Mount the host directory ./insights to /app/insights in the container
 
+# Define network configurations
 networks:
   kafka-network:
-    driver: bridge
+    driver: bridge  # Use bridge driver for the network
