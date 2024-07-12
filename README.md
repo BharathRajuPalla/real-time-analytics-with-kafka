@@ -38,7 +38,7 @@ cd real-time-analytics-with-kafka
 From the directory containing the docker-compose.yml file, run the following command to build and start the containers:
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 This command builds the images if they don't exist and starts the services defined in docker-compose.yml. The --build option ensures that any changes in the Dockerfiles or in the context are included.
 
